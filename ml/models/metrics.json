@@ -1,0 +1,176 @@
+{
+  "best_model": "Gradient Boosting Regressor",
+  "best_metrics": {
+    "mae": 2.88,
+    "rmse": 4.43,
+    "r2": 0.9946,
+    "accuracy_pct": 99.5
+  },
+  "all_models": {
+    "Gradient Boosting Regressor": {
+      "mae": 2.88,
+      "rmse": 4.43,
+      "r2": 0.9946,
+      "accuracy_pct": 99.5
+    },
+    "XGBoost Regressor": {
+      "mae": 2.97,
+      "rmse": 5.69,
+      "r2": 0.9911,
+      "accuracy_pct": 99.1
+    },
+    "Random Forest Regressor": {
+      "mae": 3.52,
+      "rmse": 6.18,
+      "r2": 0.9894,
+      "accuracy_pct": 98.9
+    },
+    "Decision Tree Regressor": {
+      "mae": 5.25,
+      "rmse": 7.77,
+      "r2": 0.9833,
+      "accuracy_pct": 98.3
+    },
+    "Linear Regression": {
+      "mae": 7.92,
+      "rmse": 13.1,
+      "r2": 0.9526,
+      "accuracy_pct": 95.3
+    }
+  },
+  "feature_importances": [
+    {
+      "feature": "doctor_to_patient_ratio",
+      "importance": 0.6327
+    },
+    {
+      "feature": "department_load",
+      "importance": 0.2636
+    },
+    {
+      "feature": "doctor_available",
+      "importance": 0.032
+    },
+    {
+      "feature": "avg_consultation_time",
+      "importance": 0.0262
+    },
+    {
+      "feature": "emergency_cases",
+      "importance": 0.0201
+    },
+    {
+      "feature": "emergency_ratio",
+      "importance": 0.0164
+    },
+    {
+      "feature": "doctor_workload",
+      "importance": 0.0071
+    },
+    {
+      "feature": "peak_hour_flag",
+      "importance": 0.0013
+    },
+    {
+      "feature": "queue_length",
+      "importance": 0.0003
+    },
+    {
+      "feature": "time_of_day",
+      "importance": 0.0002
+    },
+    {
+      "feature": "patient_count",
+      "importance": 0.0001
+    },
+    {
+      "feature": "day_of_week",
+      "importance": 0.0
+    },
+    {
+      "feature": "is_holiday",
+      "importance": 0.0
+    },
+    {
+      "feature": "weekend_flag",
+      "importance": 0.0
+    },
+    {
+      "feature": "department_Dermatology",
+      "importance": 0.0
+    },
+    {
+      "feature": "department_ENT",
+      "importance": 0.0
+    },
+    {
+      "feature": "department_General Medicine",
+      "importance": 0.0
+    },
+    {
+      "feature": "department_Orthopedics",
+      "importance": 0.0
+    }
+  ],
+  "dataset_size": 5000,
+  "train_samples": 4000,
+  "test_samples": 1000,
+  "department_statistics": {
+    "Cardiology": {
+      "avg_wait_time": 51.2,
+      "avg_queue_length": 7.5,
+      "avg_consult_time": 14.1,
+      "avg_doctors": 3.7
+    },
+    "Dermatology": {
+      "avg_wait_time": 83.2,
+      "avg_queue_length": 13.6,
+      "avg_consult_time": 8.0,
+      "avg_doctors": 1.8
+    },
+    "ENT": {
+      "avg_wait_time": 96.9,
+      "avg_queue_length": 14.0,
+      "avg_consult_time": 9.0,
+      "avg_doctors": 1.8
+    },
+    "General Medicine": {
+      "avg_wait_time": 31.0,
+      "avg_queue_length": 7.5,
+      "avg_consult_time": 10.0,
+      "avg_doctors": 3.7
+    },
+    "Orthopedics": {
+      "avg_wait_time": 66.1,
+      "avg_queue_length": 9.5,
+      "avg_consult_time": 13.1,
+      "avg_doctors": 2.9
+    }
+  },
+  "features_used": [
+    "queue_length",
+    "doctor_available",
+    "emergency_cases",
+    "avg_consultation_time",
+    "department_load",
+    "doctor_to_patient_ratio",
+    "patient_count",
+    "time_of_day",
+    "doctor_workload",
+    "peak_hour_flag",
+    "emergency_ratio",
+    "day_of_week",
+    "is_holiday",
+    "weekend_flag",
+    "department"
+  ],
+  "engineered_features": [
+    "doctor_to_patient_ratio",
+    "peak_hour_flag",
+    "weekend_flag",
+    "emergency_ratio",
+    "department_load",
+    "doctor_workload"
+  ],
+  "data_source": "Synthetic Hospital Operational Dataset (5,000 observations)"
+}
