@@ -10,8 +10,9 @@ export default function StaffView({
   onEmergency,
   onRecalculate
 }) {
-  const waitingPatients = queue.filter(q => q.status === "waiting");
-  const emergencyCount = queue.filter(q => q.priority === "emergency" && q.status === "waiting").length;
+  const isWaiting = (status) => status === 'waiting' || status === 'registered';
+  const waitingPatients = queue.filter(q => isWaiting(q.status));
+  const emergencyCount = queue.filter(q => q.priority === "emergency" && isWaiting(q.status)).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

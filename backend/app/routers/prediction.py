@@ -8,6 +8,7 @@ from app.schemas.schemas import (
     SimulationRequest, SimulationResponse, SimulationScenario
 )
 from app.ml.prediction_engine import prediction_engine
+from app.services.queue_service import WAITING_STATUSES
 
 router = APIRouter(prefix="/api/predict", tags=["AI Prediction & Explainability"])
 
@@ -41,24 +42,57 @@ def explain_token_wait(token_or_id: str, db: Session = Depends(get_db)):
     if not entry:
         entry = db.query(QueueEntry).filter(QueueEntry.token_number == token_or_id).first()
         
+    if entry and entry.status == "completed":
+        dept = entry.department.name if entry.department else "Cardiology"
+        doc = entry.doctor.user.full_name if entry.doctor and entry.doctor.user else "Attending Doctor"
+        return {
+            "token_number": entry.token_number,
+            "department": dept,
+            "predicted_wait_minutes": 0,
+            "confidence_pct": 0,
+            "summary": f"Visit for token {entry.token_number} is completed. Consultation concluded with {doc}.",
+            "factors": [
+                {"factor": "Consultation Status", "impact": "Completed", "description": "Visit has been successfully concluded with attending physician."},
+                {"factor": "Queue Position", "impact": "N/A", "description": "Patient is no longer waiting in the active queue."},
+                {"factor": "Department", "impact": dept, "description": f"Consultation conducted in {dept} clinic."}
+            ],
+            "model_used": "Gradient Boosting Regressor"
+        }
+
+    if entry and entry.status in ["consulting", "in_consultation"]:
+        dept = entry.department.name if entry.department else "Cardiology"
+        doc = entry.doctor.user.full_name if entry.doctor and entry.doctor.user else "Attending Doctor"
+        return {
+            "token_number": entry.token_number,
+            "department": dept,
+            "predicted_wait_minutes": 0,
+            "confidence_pct": entry.prediction_confidence or 94,
+            "summary": f"Patient is currently in consultation with {doc}.",
+            "factors": [
+                {"factor": "Consultation Status", "impact": "In Progress", "description": "Doctor assessment currently underway in examination room."},
+                {"factor": "Queue Position", "impact": "N/A", "description": "Active consultation in progress."}
+            ],
+            "model_used": "Gradient Boosting Regressor"
+        }
+        
     if not entry:
-        # Fallback to demo A-127 explanation
+        # Fallback to demo explanation
         dept = "Cardiology"
-        q_len = 8
+        q_len = 1
         docs = 3
-        emerg = 2
-        wait = 34
+        emerg = 0
+        wait = 15
     else:
         dept = entry.department.name if entry.department else "Cardiology"
-        q_len = entry.queue_position or 8
+        q_len = entry.queue_position or 1
         docs = db.query(Doctor).filter(
             Doctor.department_id == entry.department_id,
             Doctor.status.in_(["available", "busy"])
-        ).count() or 3
+        ).count() or 1
         emerg = db.query(QueueEntry).filter(
             QueueEntry.department_id == entry.department_id,
             QueueEntry.priority == "emergency",
-            QueueEntry.status == "waiting"
+            QueueEntry.status.in_(WAITING_STATUSES)
         ).count()
         wait = entry.estimated_wait_minutes
         
@@ -74,7 +108,7 @@ def explain_token_wait(token_or_id: str, db: Session = Depends(get_db)):
         "token_number": entry.token_number if entry else token_or_id,
         "department": dept,
         "predicted_wait_minutes": wait,
-        "confidence_pct": entry.prediction_confidence if entry else 94,
+        "confidence_pct": entry.prediction_confidence if entry else res["confidence_pct"],
         "summary": res["explanation"]["summary"],
         "factors": res["explanation"]["factors"],
         "model_used": res["model_used"]

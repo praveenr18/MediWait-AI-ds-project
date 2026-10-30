@@ -12,6 +12,8 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend
 } from 'recharts';
+import DoctorsManagement from './DoctorsManagement';
+import DepartmentsManagement from './DepartmentsManagement';
 
 export default function AdminLayout({
   kpis,
@@ -26,7 +28,8 @@ export default function AdminLayout({
   onRecalculate,
   onOpenNewToken,
   onOpenSimulation,
-  onExportCsv
+  onExportCsv,
+  onRefreshAll
 }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,14 +91,87 @@ export default function AdminLayout({
     { id: 'alerts', label: 'Alerts', icon: Bell, badge: alerts.filter(a => !a.is_resolved).length }
   ];
 
-  // Filtered queue entries
+  // Helpers for canonical queue statuses
+  const isWaiting = (status) => status === 'waiting' || status === 'registered';
+  const isConsulting = (status) => status === 'consulting' || status === 'in_consultation';
+  const isActive = (status) => isWaiting(status) || isConsulting(status);
+
+  // Active entries across the hospital
+  const hospitalActiveQueue = queue.filter(q => isActive(q.status));
+  const hospitalWaitingCount = kpis?.waiting_patients_now ?? hospitalActiveQueue.filter(q => isWaiting(q.status)).length;
+  const hospitalConsultingCount = kpis?.consulting_patients_now ?? hospitalActiveQueue.filter(q => isConsulting(q.status)).length;
+
+  // Filtered queue entries (strictly active patients)
   const filteredQueue = queue.filter(q => {
+    const isPatientActive = isActive(q.status);
     const matchesDept = selectedDept === 'all' || q.department_id === parseInt(selectedDept);
     const matchesSearch = !searchQuery || 
       q.token_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       q.patient_name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDept && matchesSearch;
+    return isPatientActive && matchesDept && matchesSearch;
   });
+
+  const isDeptFiltered = selectedDept !== 'all';
+  const queueForStats = isDeptFiltered ? filteredQueue : hospitalActiveQueue;
+
+  const liveWaitingCount = queueForStats.filter(q => isWaiting(q.status)).length;
+  const liveConsultingCount = queueForStats.filter(q => isConsulting(q.status)).length;
+  const liveEmergencyCount = queueForStats.filter(q => q.priority === 'emergency' && isWaiting(q.status)).length;
+
+  const waitingWithTimes = queueForStats.filter(q => isWaiting(q.status) && (q.estimated_wait_minutes || 0) > 0);
+  const liveAvgWait = waitingWithTimes.length > 0 
+    ? Math.round(waitingWithTimes.reduce((s, q) => s + (q.estimated_wait_minutes || 0), 0) / waitingWithTimes.length)
+    : (liveWaitingCount > 0 ? Math.round(queueForStats.filter(q => isWaiting(q.status)).reduce((s, q) => s + (q.estimated_wait_minutes || 0), 0) / liveWaitingCount) : 0);
+
+  const handleExportContextualCsv = () => {
+    if (activeMenu === 'doctors') {
+      const headers = ["Doctor ID", "Name", "Specialization", "Department", "Room", "Status", "Active Patients", "Avg Wait (Min)", "Email", "Phone"];
+      const rows = doctors.map(d => [
+        `DOC-${String(d.id).padStart(3, '0')}`,
+        `"${d.name || ''}"`,
+        `"${d.specialization || ''}"`,
+        `"${d.department || ''}"`,
+        `"${d.room_number || ''}"`,
+        `"${d.status || ''}"`,
+        d.active_patient_count ?? d.current_patients_count ?? 0,
+        d.avg_wait_minutes ?? Math.round(d.avg_consult_time || 12),
+        `"${d.email || ''}"`,
+        `"${d.phone || ''}"`
+      ]);
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mediwait_doctors_roster_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } else if (activeMenu === 'departments') {
+      const headers = ["Code", "Name", "Description", "Assigned Doctors", "Waiting Patients", "Consulting Patients", "Avg Wait (Min)", "Status"];
+      const rows = departments.map(d => [
+        `"${d.code || ''}"`,
+        `"${d.name || ''}"`,
+        `"${(d.description || '').replace(/"/g, '""')}"`,
+        d.assigned_doctors_count ?? (d.doctors?.length || 0),
+        queue.filter(q => q.department_id === d.id && (q.status === 'waiting' || q.status === 'registered')).length || d.waiting_count || 0,
+        queue.filter(q => q.department_id === d.id && (q.status === 'consulting' || q.status === 'in_consultation')).length || d.consulting_count || 0,
+        d.avg_wait_minutes ?? Math.round(d.avg_consult_time || 12),
+        `"${d.operational_status || (d.is_active ? 'Normal' : 'Inactive')}"`
+      ]);
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mediwait_departments_roster_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } else {
+      if (onExportCsv) onExportCsv();
+    }
+  };
 
   const deptColors = ['#0284c7', '#10b981', '#f59e0b', '#6366f1', '#ec4899'];
 
@@ -190,7 +266,7 @@ export default function AdminLayout({
               Register Patient
             </button>
             <button
-              onClick={onExportCsv}
+              onClick={handleExportContextualCsv}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-900 hover:bg-black text-white shadow-xs transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
@@ -216,28 +292,28 @@ export default function AdminLayout({
               {/* Waiting Patients */}
               <div className="medical-card p-3.5">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Waiting</span>
-                <p className="text-2xl font-black text-slate-900 mt-1">{kpis?.waiting_patients_now ?? 42}</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{hospitalWaitingCount}</p>
                 <p className="text-[10px] text-amber-600 font-semibold mt-1">Now</p>
               </div>
 
               {/* Doctors Available */}
               <div className="medical-card p-3.5">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Doctors</span>
-                <p className="text-2xl font-black text-slate-900 mt-1">{kpis?.doctors_available_ratio ?? "12 / 18"}</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{kpis?.doctors_available_ratio ?? "8 / 9"}</p>
                 <p className="text-[10px] text-slate-500 font-medium mt-1">On Duty</p>
               </div>
 
               {/* Emergency Cases */}
               <div className="medical-card p-3.5">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Emergency</span>
-                <p className="text-2xl font-black text-rose-600 mt-1">{kpis?.emergency_cases_now ?? 3}</p>
+                <p className="text-2xl font-black text-rose-600 mt-1">{kpis?.emergency_cases_now ?? hospitalActiveQueue.filter(q => q.priority === 'emergency' && isWaiting(q.status)).length}</p>
                 <p className="text-[10px] text-rose-600 font-semibold mt-1">Triage Active</p>
               </div>
 
               {/* Average Waiting Time */}
               <div className="medical-card p-3.5">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Avg Wait</span>
-                <p className="text-2xl font-black text-slate-900 mt-1">{kpis?.avg_waiting_time_minutes ?? 21} <span className="text-xs font-normal text-slate-400">min</span></p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{kpis?.avg_waiting_time_minutes ?? (hospitalWaitingCount > 0 ? liveAvgWait : 0)} <span className="text-xs font-normal text-slate-400">min</span></p>
                 <p className="text-[10px] text-emerald-600 font-semibold mt-1">Within SLA</p>
               </div>
 
@@ -446,18 +522,18 @@ export default function AdminLayout({
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                            q.status === 'consulting' ? 'bg-emerald-100 text-emerald-800' :
+                            isConsulting(q.status) ? 'bg-emerald-100 text-emerald-800' :
                             q.status === 'completed' ? 'bg-slate-100 text-slate-700' :
                             q.status === 'cancelled' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {q.status}
+                            {isConsulting(q.status) ? 'Consulting' : isWaiting(q.status) ? 'Waiting' : q.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 font-bold text-slate-800">
-                          {q.status === 'consulting' ? '—' : `${q.estimated_wait_minutes} min`}
+                          {isConsulting(q.status) ? '—' : `${q.estimated_wait_minutes} min`}
                         </td>
                         <td className="py-3 px-4 text-right space-x-1">
-                          {q.status === 'waiting' && (
+                          {isWaiting(q.status) && (
                             <>
                               <button
                                 onClick={() => onCallNext(q.id)}
@@ -474,7 +550,7 @@ export default function AdminLayout({
                               </button>
                             </>
                           )}
-                          {q.status === 'consulting' && (
+                          {isConsulting(q.status) && (
                             <button
                               onClick={() => onComplete(q.id)}
                               className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
@@ -482,7 +558,7 @@ export default function AdminLayout({
                               Complete
                             </button>
                           )}
-                          {q.status === 'waiting' && (
+                          {isWaiting(q.status) && (
                             <button
                               onClick={() => onCancelToken(q.id)}
                               className="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-rose-600 transition-colors"
@@ -509,25 +585,27 @@ export default function AdminLayout({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="medical-card p-4">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Waiting Now</span>
-                <p className="text-3xl font-black text-amber-600 mt-1">{queue.filter(q => q.status === 'waiting').length}</p>
-                <p className="text-[10px] text-amber-600 font-semibold mt-1">In Queue</p>
+                <p className="text-3xl font-black text-amber-600 mt-1">{liveWaitingCount}</p>
+                <p className="text-[10px] text-amber-600 font-semibold mt-1">
+                  {isDeptFiltered ? `Dept Queue • ${hospitalWaitingCount} Hosp Total` : 'In Queue'}
+                </p>
               </div>
               <div className="medical-card p-4">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Consulting</span>
-                <p className="text-3xl font-black text-emerald-600 mt-1">{queue.filter(q => q.status === 'consulting').length}</p>
-                <p className="text-[10px] text-emerald-600 font-semibold mt-1">Active Now</p>
+                <p className="text-3xl font-black text-emerald-600 mt-1">{liveConsultingCount}</p>
+                <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                  {isDeptFiltered ? `Dept Active • ${hospitalConsultingCount} Hosp Total` : 'Active Now'}
+                </p>
               </div>
               <div className="medical-card p-4">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Emergency</span>
-                <p className="text-3xl font-black text-rose-600 mt-1">{queue.filter(q => q.priority === 'emergency' && q.status === 'waiting').length}</p>
+                <p className="text-3xl font-black text-rose-600 mt-1">{liveEmergencyCount}</p>
                 <p className="text-[10px] text-rose-600 font-semibold mt-1">Priority Triage</p>
               </div>
               <div className="medical-card p-4">
                 <span className="text-[10px] font-bold uppercase text-slate-400">Avg Wait</span>
                 <p className="text-3xl font-black text-sky-700 mt-1">
-                  {queue.filter(q => q.status === 'waiting').length > 0
-                    ? Math.round(queue.filter(q => q.status === 'waiting').reduce((s, q) => s + (q.estimated_wait_minutes || 0), 0) / queue.filter(q => q.status === 'waiting').length)
-                    : 0}
+                  {liveAvgWait}
                   <span className="text-sm font-normal text-slate-400 ml-1">min</span>
                 </p>
                 <p className="text-[10px] text-sky-600 font-semibold mt-1">AI Predicted</p>
@@ -625,21 +703,21 @@ export default function AdminLayout({
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                            q.status === 'consulting' ? 'bg-emerald-100 text-emerald-800' :
+                            isConsulting(q.status) ? 'bg-emerald-100 text-emerald-800' :
                             q.status === 'completed' ? 'bg-slate-100 text-slate-700' :
                             q.status === 'cancelled' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {q.status}
+                            {isConsulting(q.status) ? 'Consulting' : isWaiting(q.status) ? 'Waiting' : q.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 font-bold text-slate-800">
-                          {q.status === 'consulting' ? '—' : `${q.estimated_wait_minutes} min`}
+                          {isConsulting(q.status) ? '—' : `${q.estimated_wait_minutes} min`}
                         </td>
                         <td className="py-3 px-4 text-slate-600 font-semibold">
-                          {q.status === 'waiting' ? `#${q.queue_position}` : '—'}
+                          {isWaiting(q.status) ? `#${q.queue_position}` : '—'}
                         </td>
                         <td className="py-3 px-4 text-right space-x-1">
-                          {q.status === 'waiting' && (
+                          {isWaiting(q.status) && (
                             <>
                               <button
                                 onClick={() => onCallNext(q.id)}
@@ -684,8 +762,8 @@ export default function AdminLayout({
             {/* Per-Department Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {departments.map((dept, i) => {
-                const deptQueue = queue.filter(q => q.department_id === dept.id && q.status === 'waiting');
-                const consulting = queue.filter(q => q.department_id === dept.id && q.status === 'consulting').length;
+                const deptQueue = queue.filter(q => q.department_id === dept.id && isWaiting(q.status));
+                const consulting = queue.filter(q => q.department_id === dept.id && isConsulting(q.status)).length;
                 return (
                   <div key={dept.id} className="medical-card p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -1217,6 +1295,34 @@ export default function AdminLayout({
               </div>
             </div>
           </div>
+        )}
+
+        {/* -------------------- VIEW 8: DOCTORS MANAGEMENT -------------------- */}
+        {activeMenu === 'doctors' && (
+          <DoctorsManagement
+            doctors={doctors}
+            departments={departments}
+            queue={queue}
+            onRefresh={onRefreshAll}
+            onCallNext={onCallNext}
+            onComplete={onComplete}
+            onEmergency={onEmergency}
+            onOpenNewToken={onOpenNewToken}
+          />
+        )}
+
+        {/* -------------------- VIEW 9: DEPARTMENTS MANAGEMENT -------------------- */}
+        {activeMenu === 'departments' && (
+          <DepartmentsManagement
+            departments={departments}
+            doctors={doctors}
+            queue={queue}
+            onRefresh={onRefreshAll}
+            onCallNext={onCallNext}
+            onComplete={onComplete}
+            onEmergency={onEmergency}
+            onOpenNewToken={onOpenNewToken}
+          />
         )}
 
       </main>

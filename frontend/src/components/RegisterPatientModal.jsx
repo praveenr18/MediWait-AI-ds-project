@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { X, UserPlus, AlertCircle, Clock, HeartPulse } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, AlertCircle, Clock, HeartPulse, UserCheck } from 'lucide-react';
 
-export default function RegisterPatientModal({ isOpen, onClose, departments = [], onRegistered }) {
+export default function RegisterPatientModal({ isOpen, onClose, departments = [], currentUser, onRegistered }) {
   const [formData, setFormData] = useState({
     patient_name: '',
     phone: '',
@@ -14,10 +14,27 @@ export default function RegisterPatientModal({ isOpen, onClose, departments = []
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setError(null);
+      const isPatient = currentUser?.role === 'patient';
+      setFormData({
+        patient_name: isPatient && currentUser?.full_name ? currentUser.full_name : '',
+        phone: isPatient && currentUser?.phone ? currentUser.phone : '',
+        age: 35,
+        gender: 'Male',
+        department_id: departments[0]?.id || 1,
+        priority: 'normal',
+        reason: ''
+      });
+    }
+  }, [isOpen, currentUser, departments]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     if (!formData.patient_name || !formData.phone) {
       setError("Please fill in patient name and mobile number.");
       return;
@@ -179,8 +196,8 @@ export default function RegisterPatientModal({ isOpen, onClose, departments = []
               disabled={loading}
               className="px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-1.5"
             >
-              <Clock className="w-3.5 h-3.5" />
-              {loading ? "Generating..." : "Generate Token"}
+              <Clock className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? "Registering & Assigning..." : "Generate Token"}
             </button>
           </div>
         </form>

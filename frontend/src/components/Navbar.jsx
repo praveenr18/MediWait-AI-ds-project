@@ -12,7 +12,8 @@ export default function Navbar({
   notifications = [], 
   onOpenNotifications,
   onRecalculate,
-  onNewRegistration
+  onNewRegistration,
+  isSyncingModel = false
 }) {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -28,7 +29,7 @@ export default function Navbar({
     { id: 1, role: 'admin', name: 'Dr. Alok Sharma', roleTitle: 'Chief Medical Admin' },
     { id: 3, role: 'doctor', name: 'Dr. Kumar', roleTitle: 'Cardiology Specialist' },
     { id: 2, role: 'staff', name: 'Sarah Jenkins, RN', roleTitle: 'Triage / Receptionist' },
-    { id: 10, role: 'patient', name: 'John Doe', roleTitle: 'Active Patient (A-127)' },
+    { id: 12, role: 'patient', name: 'John Doe', roleTitle: 'Active Patient (A-127)' },
   ];
 
   return (
@@ -65,11 +66,12 @@ export default function Navbar({
             <span className="font-medium text-slate-700">Predictive Queue Engine Active</span>
             <button 
               onClick={onRecalculate}
+              disabled={isSyncingModel}
               title="Recalculate wait times using real-time ML inference"
-              className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-sky-600 hover:bg-slate-100 transition-colors border border-slate-200"
+              className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-sky-600 hover:bg-slate-100 transition-colors border border-slate-200 disabled:opacity-50"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Sync Model
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingModel ? 'animate-spin' : ''}`} />
+              {isSyncingModel ? 'Syncing...' : 'Sync Model'}
             </button>
           </div>
 

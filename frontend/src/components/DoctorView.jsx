@@ -10,9 +10,11 @@ export default function DoctorView({
   onEmergency
 }) {
   // Filter queue assigned to this doctor or department
+  const isWaiting = (status) => status === 'waiting' || status === 'registered';
+  const isConsulting = (status) => status === 'consulting' || status === 'in_consultation';
   const doctorQueue = queue.filter(q => q.department_name === department);
-  const currentlyConsulting = doctorQueue.find(q => q.status === "consulting");
-  const waitingPatients = doctorQueue.filter(q => q.status === "waiting");
+  const currentlyConsulting = doctorQueue.find(q => isConsulting(q.status));
+  const waitingPatients = doctorQueue.filter(q => isWaiting(q.status));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

@@ -58,10 +58,12 @@ class QueueEntryOut(BaseModel):
     department_name: str
     doctor_id: Optional[int] = None
     doctor_name: Optional[str] = None
+    doctor_room: Optional[str] = "Room 101"
     status: str
     priority: str
     queue_position: int
     patients_ahead: int
+    emergency_cases_ahead: int = 0
     estimated_wait_minutes: int
     prediction_confidence: int
     registered_at: datetime
@@ -130,6 +132,7 @@ class SimulationResponse(BaseModel):
 class AdminKPIs(BaseModel):
     total_patients_today: int
     waiting_patients_now: int
+    consulting_patients_now: int = 0
     doctors_available_ratio: str # e.g. "12 / 18"
     emergency_cases_now: int
     avg_waiting_time_minutes: int

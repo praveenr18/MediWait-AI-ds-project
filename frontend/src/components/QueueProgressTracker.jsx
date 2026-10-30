@@ -13,10 +13,13 @@ export default function QueueProgressTracker({ status = "waiting" }) {
     'registered': 0,
     'waiting': 1,
     'consulting': 2,
+    'in_consultation': 2,
     'completed': 3
   };
 
-  const currentIdx = statusOrder[status?.toLowerCase()] ?? 1;
+  const normStatus = status?.toLowerCase() || 'waiting';
+  const currentIdx = statusOrder[normStatus] ?? 1;
+  const isFinished = normStatus === 'completed';
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
@@ -24,8 +27,14 @@ export default function QueueProgressTracker({ status = "waiting" }) {
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
           Visit Progress Tracker
         </h4>
-        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-          Status: <span className="capitalize">{status}</span>
+        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+          isFinished
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold'
+            : (normStatus === 'consulting' || normStatus === 'in_consultation')
+              ? 'bg-blue-50 text-blue-700 border-blue-200 font-bold'
+              : 'bg-sky-50 text-sky-700 border-sky-200 font-bold'
+        }`}>
+          Status: <span className="capitalize">{normStatus === 'in_consultation' ? 'Consulting' : normStatus}</span>
         </span>
       </div>
 
@@ -41,7 +50,7 @@ export default function QueueProgressTracker({ status = "waiting" }) {
               {idx < steps.length - 1 && (
                 <div 
                   className={`hidden sm:block absolute top-5 left-1/2 w-full h-1 -z-0 transition-colors ${
-                    idx < currentIdx ? 'bg-sky-500' : 'bg-slate-200'
+                    idx < currentIdx ? (isFinished ? 'bg-emerald-500' : 'bg-sky-500') : 'bg-slate-200'
                   }`} 
                 />
               )}
@@ -52,7 +61,9 @@ export default function QueueProgressTracker({ status = "waiting" }) {
                   isDone 
                     ? 'bg-sky-600 text-white shadow-xs' 
                     : isCurrent 
-                      ? 'bg-sky-500 text-white ring-4 ring-sky-100 shadow-md animate-pulse' 
+                      ? (isFinished 
+                          ? 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-md' 
+                          : 'bg-sky-500 text-white ring-4 ring-sky-100 shadow-md animate-pulse')
                       : 'bg-slate-100 text-slate-400 border border-slate-200'
                 }`}
               >
@@ -61,7 +72,11 @@ export default function QueueProgressTracker({ status = "waiting" }) {
 
               {/* Label & Description */}
               <p className={`text-xs mt-2 font-bold transition-colors ${
-                isCurrent ? 'text-sky-600' : isDone ? 'text-slate-900' : 'text-slate-400'
+                isCurrent 
+                  ? (isFinished ? 'text-emerald-700' : 'text-sky-600') 
+                  : isDone 
+                    ? 'text-slate-900' 
+                    : 'text-slate-400'
               }`}>
                 {step.label}
               </p>

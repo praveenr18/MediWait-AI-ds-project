@@ -45,10 +45,22 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return fetchApi(`/queue${query ? `?${query}` : ""}`);
   },
-  getMyToken: (tokenNumber) => {
-    const query = tokenNumber ? `?token_number=${tokenNumber}` : "";
+  getMyToken: (params = {}) => {
+    let query = "";
+    if (typeof params === 'number') {
+      query = `?visit_id=${params}`;
+    } else if (typeof params === 'string' && params) {
+      query = `?token_number=${encodeURIComponent(params)}`;
+    } else if (params && typeof params === 'object') {
+      const q = new URLSearchParams();
+      if (params.visit_id) q.set('visit_id', params.visit_id);
+      if (params.token_number) q.set('token_number', params.token_number);
+      const s = q.toString();
+      if (s) query = `?${s}`;
+    }
     return fetchApi(`/queue/my-token${query}`);
   },
+  getMyVisits: () => fetchApi("/queue/my-visits"),
   getDepartmentsWaitTimes: () => fetchApi("/queue/departments"),
   registerPatient: (data) => fetchApi("/queue/register", { method: "POST", body: JSON.stringify(data) }),
   callNext: (id, docId) => fetchApi(`/queue/${id}/call-next${docId ? `?doctor_id=${docId}` : ""}`, { method: "POST" }),
@@ -56,6 +68,7 @@ export const api = {
   markEmergency: (id) => fetchApi(`/queue/${id}/emergency`, { method: "POST" }),
   cancelQueueEntry: (id) => fetchApi(`/queue/${id}/cancel`, { method: "POST" }),
   recalculateQueue: () => fetchApi("/queue/recalculate", { method: "POST" }),
+  getQueueStats: (deptId) => fetchApi(`/queue/stats${deptId ? `?department_id=${deptId}` : ""}`),
 
   // Predictions & Explainability
   predictWaitTime: (data) => fetchApi("/predict", { method: "POST", body: JSON.stringify(data) }),
@@ -77,8 +90,12 @@ export const api = {
   getDoctors: () => fetchApi("/doctors"),
   addDoctor: (data) => fetchApi("/doctors", { method: "POST", body: JSON.stringify(data) }),
   updateDoctor: (id, data) => fetchApi(`/doctors/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDoctor: (id) => fetchApi(`/doctors/${id}`, { method: "DELETE" }),
   getDepartments: () => fetchApi("/departments"),
   createDepartment: (data) => fetchApi("/departments", { method: "POST", body: JSON.stringify(data) }),
+  updateDepartment: (id, data) => fetchApi(`/departments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDepartment: (id) => fetchApi(`/departments/${id}`, { method: "DELETE" }),
+  reassignDoctors: (deptId, doctorIds) => fetchApi(`/departments/${deptId}/reassign-doctors`, { method: "POST", body: JSON.stringify({ doctor_ids: doctorIds }) }),
   getAlerts: () => fetchApi("/alerts"),
   resolveAlert: (id) => fetchApi(`/alerts/${id}/resolve`, { method: "POST" }),
   getFeedback: () => fetchApi("/feedback"),

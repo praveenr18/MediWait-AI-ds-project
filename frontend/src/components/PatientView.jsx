@@ -3,37 +3,57 @@ import {
   Clock, ShieldCheck, Users, AlertCircle, 
   Stethoscope, Sparkles, ChevronRight, Bell,
   Calendar, Award, HeartHandshake, HelpCircle, 
-  ExternalLink, CheckCircle2, User, RefreshCw
+  ExternalLink, CheckCircle2, User, RefreshCw,
+  UserPlus, FileText, Check
 } from 'lucide-react';
 import QueueProgressTracker from './QueueProgressTracker';
 
 export default function PatientView({ 
+  currentUser,
   tokenData, 
   departments = [], 
   queueList = [], 
   notifications = [],
+  myVisits = [],
+  selectedVisitId,
+  onSelectVisit,
   onOpenWhyThisWait, 
   onOpenFeedback,
   onOpenNewToken,
-  onRefresh
+  onRefresh,
+  isRefreshing = false
 }) {
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, liveQueue, notifications, profile
 
+  const hasVisit = Boolean(tokenData && tokenData.token_number);
+  const currentToken = tokenData?.token_number || "—";
+  const departmentName = tokenData?.department_name || (hasVisit ? "General Clinic" : "—");
+  const waitMinutes = tokenData?.estimated_wait_minutes ?? 0;
+  const confidence = tokenData?.prediction_confidence ?? 0;
+  const queuePos = tokenData?.queue_position ?? 0;
+  const aheadCount = tokenData?.patients_ahead ?? 0;
+  const emergencyAhead = tokenData?.emergency_cases_ahead ?? 0;
+  const doctorName = tokenData?.doctor_name || (hasVisit ? "Pending Doctor Assignment" : "—");
+  const doctorRoom = tokenData?.doctor_room || (hasVisit ? "Triage Desk" : "—");
+  const status = tokenData?.status || "none";
+
+  const isCompleted = status === "completed";
+  const isConsulting = status === "consulting" || status === "in_consultation";
+  const isCancelled = status === "cancelled";
+  const isWaiting = status === "waiting" || status === "registered";
+
+  const patientDisplayName = tokenData?.patient_name || currentUser?.full_name || "Patient";
+
   // Format expected consultation time e.g. "11:48 AM"
   const getExpectedTime = (mins) => {
+    if (isCompleted) return "Visit Completed";
+    if (isConsulting) return "In Consultation";
+    if (isCancelled) return "Cancelled";
+    if (mins === undefined || mins === null || mins <= 0) return "Now Approaching";
     const d = new Date();
-    d.setMinutes(d.getMinutes() + (mins || 34));
+    d.setMinutes(d.getMinutes() + mins);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-
-  const currentToken = tokenData?.token_number || "A-127";
-  const departmentName = tokenData?.department_name || "Cardiology Department";
-  const waitMinutes = tokenData?.estimated_wait_minutes ?? 34;
-  const confidence = tokenData?.prediction_confidence ?? 94;
-  const queuePos = tokenData?.queue_position ?? 8;
-  const aheadCount = tokenData?.patients_ahead ?? 7;
-  const doctorName = tokenData?.doctor_name || "Dr. Kumar";
-  const status = tokenData?.status || "waiting";
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -47,7 +67,7 @@ export default function PatientView({
               <span>MediWait AI • Live Patient Queue Tracking</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Hello, John Doe 👋
+              Hello, {patientDisplayName} 👋
             </h1>
             <p className="text-sm text-sky-100 mt-1 max-w-xl">
               We're here to help you manage your waiting time with real-time AI operational predictions.
@@ -57,15 +77,17 @@ export default function PatientView({
           <div className="flex items-center gap-3">
             <button
               onClick={onRefresh}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-colors"
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-colors disabled:opacity-50"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Sync Queue
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Syncing...' : 'Sync Queue'}
             </button>
             <button
               onClick={onOpenNewToken}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-sky-700 hover:bg-sky-50 shadow-sm transition-colors"
             >
+              <UserPlus className="w-3.5 h-3.5" />
               Register Visit
             </button>
           </div>
@@ -103,7 +125,7 @@ export default function PatientView({
               activeTab === 'profile' ? 'bg-white text-sky-800 shadow-xs' : 'text-white/80 hover:text-white hover:bg-white/10'
             }`}
           >
-            👤 My Visits & Profile
+            👤 My Visits & Profile ({myVisits.length})
           </button>
         </div>
       </div>
@@ -111,62 +133,172 @@ export default function PatientView({
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
           
-          {/* Progress Tracker (Section 7) */}
-          <QueueProgressTracker status={status} />
-
-          {/* Primary Cards Grid (Section 6 & 8) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* Token Card */}
-            <div className="medical-card p-5 border-l-4 border-l-sky-500 flex flex-col justify-between">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Your Token
+          {/* Multiple Visits Switcher Bar */}
+          {myVisits && myVisits.length > 1 && (
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-sky-600 shrink-0" />
+                <span className="text-xs font-bold text-slate-800">
+                  Switch Active Viewed Visit ({myVisits.length} recorded):
                 </span>
-                <h3 className="text-3xl font-extrabold text-slate-900 mt-1">
-                  {currentToken}
-                </h3>
               </div>
-              <p className="text-xs font-semibold text-sky-700 mt-3 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-sky-500" />
-                {departmentName}
-              </p>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                {myVisits.map((v) => {
+                  const isCurrent = (selectedVisitId === v.id) || (!selectedVisitId && tokenData?.id === v.id);
+                  const isVActive = v.status === 'waiting' || v.status === 'registered' || v.status === 'consulting';
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => onSelectVisit && onSelectVisit(v.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 border ${
+                        isCurrent 
+                          ? 'bg-sky-600 text-white border-sky-600 shadow-xs ring-2 ring-sky-200' 
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <span className="font-mono">{v.token_number}</span>
+                      <span className="text-[10px] font-normal opacity-90">({v.department_name})</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        isVActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'
+                      }`} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+          )}
+
+          {!hasVisit ? (
+            /* Empty State: No active visit */
+            <div className="medical-card p-10 text-center border-dashed border-2 border-slate-300 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto shadow-xs">
+                <Clock className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">No Active Hospital Visit Selected</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  You are currently not queued for any outpatient department consultation. Click below to register your visit and track your waiting time in real time.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  onClick={onOpenNewToken}
+                  className="px-6 py-2.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-sm inline-flex items-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Register New Visit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Progress Tracker (Section 7) */}
+              <QueueProgressTracker status={status} />
+
+              {/* Primary Cards Grid (Section 6 & 8) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* Token Card */}
+                <div className={`medical-card p-5 border-l-4 flex flex-col justify-between ${
+                  isCompleted ? 'border-l-emerald-500' : isConsulting ? 'border-l-blue-600' : 'border-l-sky-500'
+                }`}>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Your Token
+                    </span>
+                    <h3 className="text-3xl font-extrabold text-slate-900 mt-1">
+                      {currentToken}
+                    </h3>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs">
+                    <p className="font-semibold text-slate-700 flex items-center gap-1 truncate">
+                      <span className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                      {departmentName}
+                    </p>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      isCompleted 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : isConsulting 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-sky-100 text-sky-800'
+                    }`}>
+                      {isCompleted ? 'Completed' : isConsulting ? 'In Consultation' : 'Waiting'}
+                    </span>
+                  </div>
+                </div>
 
             {/* Estimated Waiting Time Card */}
-            <div className="medical-card p-5 border-l-4 border-l-blue-600 flex flex-col justify-between">
+            <div className={`medical-card p-5 border-l-4 flex flex-col justify-between ${
+              isCompleted ? 'border-l-emerald-600 bg-emerald-50/20' : isConsulting ? 'border-l-blue-600 bg-blue-50/20' : 'border-l-blue-600'
+            }`}>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Estimated Waiting Time
                 </span>
                 <div className="flex items-baseline space-x-1.5 mt-1">
-                  <h3 className="text-3xl font-extrabold text-slate-900">{waitMinutes}</h3>
+                  <h3 className={`text-3xl font-extrabold ${isCompleted ? 'text-emerald-700' : isConsulting ? 'text-blue-700' : 'text-slate-900'}`}>
+                    {isCompleted ? '0' : isConsulting ? '0' : waitMinutes}
+                  </h3>
                   <span className="text-sm font-bold text-slate-500">Minutes</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-3">
-                Expected: <span className="font-bold text-slate-800">{getExpectedTime(waitMinutes)}</span>
+              <p className="text-xs mt-3 flex items-center gap-1">
+                {isCompleted ? (
+                  <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Visit Completed
+                  </span>
+                ) : isConsulting ? (
+                  <span className="font-semibold text-blue-700 flex items-center gap-1">
+                    <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
+                    Consultation in Progress
+                  </span>
+                ) : (
+                  <span className="text-slate-500">
+                    Expected: <span className="font-bold text-slate-800">{getExpectedTime(waitMinutes)}</span>
+                  </span>
+                )}
               </p>
             </div>
 
             {/* Prediction Confidence Card */}
-            <div className="medical-card p-5 border-l-4 border-l-emerald-500 flex flex-col justify-between">
+            <div className={`medical-card p-5 border-l-4 flex flex-col justify-between ${
+              isCompleted ? 'border-l-slate-300' : 'border-l-emerald-500'
+            }`}>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Prediction Confidence
                 </span>
                 <div className="flex items-baseline space-x-1 mt-1">
-                  <h3 className="text-3xl font-extrabold text-emerald-600">{confidence}%</h3>
+                  <h3 className={`text-3xl font-extrabold ${isCompleted ? 'text-slate-400' : 'text-emerald-600'}`}>
+                    {isCompleted ? '—' : isConsulting ? '—' : confidence > 0 ? `${confidence}%` : 'Unavailable'}
+                  </h3>
                 </div>
               </div>
-              <p className="text-xs text-emerald-700 mt-3 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                Trained Gradient Boosting ML Model
+              <p className="text-xs mt-3 flex items-center gap-1">
+                {isCompleted ? (
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    Visit Concluded
+                  </span>
+                ) : isConsulting ? (
+                  <span className="text-blue-600 flex items-center gap-1">
+                    <Stethoscope className="w-3.5 h-3.5 text-blue-500" />
+                    With Attending Doctor
+                  </span>
+                ) : (
+                  <span className="text-emerald-700 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    Trained Gradient Boosting ML Model
+                  </span>
+                )}
               </p>
             </div>
 
             {/* Assigned Doctor Card */}
-            <div className="medical-card p-5 border-l-4 border-l-indigo-500 flex flex-col justify-between">
+            <div className={`medical-card p-5 border-l-4 flex flex-col justify-between ${
+              isCompleted ? 'border-l-emerald-500' : isConsulting ? 'border-l-blue-500' : 'border-l-indigo-500'
+            }`}>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Assigned Doctor
@@ -175,9 +307,17 @@ export default function PatientView({
                   {doctorName}
                 </h3>
               </div>
-              <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
-                <Stethoscope className="w-3.5 h-3.5 text-indigo-500" />
-                Room 101 • Consulting
+              <p className="text-xs mt-3 flex items-center gap-1">
+                <Stethoscope className={`w-3.5 h-3.5 ${isCompleted ? 'text-emerald-600' : isConsulting ? 'text-blue-600 animate-pulse' : 'text-indigo-500'}`} />
+                <span className="font-semibold text-slate-700">
+                  {doctorRoom}
+                </span>
+                <span className="text-slate-400">•</span>
+                <span className={`font-semibold ${
+                  isCompleted ? 'text-emerald-700' : isConsulting ? 'text-blue-700' : 'text-indigo-600'
+                }`}>
+                  {isCompleted ? 'Completed' : isConsulting ? 'In Consultation' : 'On Duty'}
+                </span>
               </p>
             </div>
 
@@ -188,7 +328,9 @@ export default function PatientView({
             <div className="bg-slate-100/80 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase text-slate-400">Queue Position</p>
-                <p className="text-2xl font-bold text-slate-800 mt-0.5">{queuePos}</p>
+                <p className="text-2xl font-bold text-slate-800 mt-0.5">
+                  {isWaiting && queuePos > 0 ? queuePos : '—'}
+                </p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-600 shadow-xs">
                 <Users className="w-5 h-5" />
@@ -198,7 +340,9 @@ export default function PatientView({
             <div className="bg-slate-100/80 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase text-slate-400">Patients Ahead</p>
-                <p className="text-2xl font-bold text-slate-800 mt-0.5">{aheadCount}</p>
+                <p className="text-2xl font-bold text-slate-800 mt-0.5">
+                  {isWaiting ? aheadCount : 0}
+                </p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-600 shadow-xs">
                 <Clock className="w-5 h-5" />
@@ -208,7 +352,9 @@ export default function PatientView({
             <div className="bg-slate-100/80 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase text-slate-400">Emergency Cases Ahead</p>
-                <p className="text-2xl font-bold text-rose-600 mt-0.5">2</p>
+                <p className={`text-2xl font-bold mt-0.5 ${isWaiting && emergencyAhead > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                  {isWaiting ? emergencyAhead : 0}
+                </p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-rose-600 shadow-xs">
                 <AlertCircle className="w-5 h-5" />
@@ -217,27 +363,56 @@ export default function PatientView({
           </div>
 
           {/* AI PREDICTION CARD (Section 8) */}
-          <div className="medical-card p-6 border-2 border-sky-100 bg-gradient-to-br from-white to-sky-50/40">
+          <div className={`medical-card p-6 border-2 ${
+            isCompleted 
+              ? 'border-emerald-200 bg-gradient-to-br from-white to-emerald-50/30' 
+              : isConsulting 
+                ? 'border-blue-200 bg-gradient-to-br from-white to-blue-50/30'
+                : 'border-sky-100 bg-gradient-to-br from-white to-sky-50/40'
+          }`}>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
-                  <Sparkles className="w-6 h-6" />
+                <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-md shrink-0 ${
+                  isCompleted ? 'bg-emerald-600 shadow-emerald-500/20' : isConsulting ? 'bg-blue-600 shadow-blue-500/20' : 'bg-sky-600 shadow-sky-500/20'
+                }`}>
+                  {isCompleted ? <CheckCircle2 className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded">
-                      AI Estimated Waiting Time
+                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      isCompleted 
+                        ? 'text-emerald-800 bg-emerald-100' 
+                        : isConsulting 
+                          ? 'text-blue-800 bg-blue-100' 
+                          : 'text-sky-700 bg-sky-100/80'
+                    }`}>
+                      {isCompleted ? 'Visit Concluded' : isConsulting ? 'Consultation In Progress' : 'AI Estimated Waiting Time'}
                     </span>
-                    <span className="text-xs text-slate-400">• Real-Time Inferred</span>
+                    <span className="text-xs text-slate-400">
+                      {isCompleted ? '• Consultation Finished' : isConsulting ? '• Active with Doctor' : '• Real-Time Inferred'}
+                    </span>
                   </div>
+                  
                   <div className="flex items-baseline space-x-3 mt-1.5">
-                    <span className="text-4xl font-extrabold text-slate-900">{waitMinutes} Minutes</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      {confidence}% Confidence
+                    <span className="text-3xl sm:text-4xl font-extrabold text-slate-900">
+                      {isCompleted 
+                        ? 'Consultation Completed' 
+                        : isConsulting 
+                          ? 'Currently with Doctor' 
+                          : `${waitMinutes} Minutes`}
                     </span>
+                    {!isCompleted && !isConsulting && confidence > 0 && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {confidence}% Confidence
+                      </span>
+                    )}
                   </div>
+                  
                   <p className="text-xs text-slate-500 mt-1">
-                    Expected Consultation Window: <span className="font-bold text-slate-800">{getExpectedTime(waitMinutes)}</span>
+                    Expected Consultation Window:{' '}
+                    <span className="font-bold text-slate-800">
+                      {isCompleted ? 'Concluded' : isConsulting ? `In Room ${doctorRoom}` : getExpectedTime(waitMinutes)}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -301,6 +476,8 @@ export default function PatientView({
               })}
             </div>
           </div>
+            </>
+          )}
 
         </div>
       )}
@@ -310,8 +487,10 @@ export default function PatientView({
         <div className="medical-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Live Department Queue</h3>
-              <p className="text-xs text-slate-500">Cardiology Outpatient Clinic • Real-time status update</p>
+              <h3 className="text-base font-bold text-slate-900">Live Hospital Queue</h3>
+              <p className="text-xs text-slate-500">
+                {departmentName} Clinic • Real-time status update
+              </p>
             </div>
             <button
               onClick={onRefresh}
@@ -335,8 +514,10 @@ export default function PatientView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {queueList.filter(q => q.department_name === "Cardiology").map((q) => {
-                  const isYou = q.token_number === currentToken;
+                {queueList
+                  .filter(q => !departmentName || departmentName === "—" || q.department_name === departmentName || queueList.length <= 10)
+                  .map((q) => {
+                  const isYou = q.token_number === currentToken || (tokenData?.id && q.id === tokenData.id);
                   return (
                     <tr 
                       key={q.id} 
@@ -355,9 +536,9 @@ export default function PatientView({
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-slate-800">
-                        {isYou ? "John Doe" : `Patient ${q.id}`}
+                        {isYou ? patientDisplayName : (q.patient_name || `Patient ${q.id}`)}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-600">{q.doctor_name || "Dr. Kumar"}</td>
+                      <td className="py-3.5 px-4 text-slate-600">{q.doctor_name || "Pending Assignment"}</td>
                       <td className="py-3.5 px-4">
                         {q.priority === 'emergency' ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
@@ -369,15 +550,15 @@ export default function PatientView({
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                          q.status === 'consulting' 
+                          (q.status === 'consulting' || q.status === 'in_consultation')
                             ? 'bg-emerald-100 text-emerald-800' 
                             : 'bg-amber-100 text-amber-800'
                         }`}>
-                          {q.status === 'consulting' ? 'Consulting' : 'Waiting'}
+                          {(q.status === 'consulting' || q.status === 'in_consultation') ? 'Consulting' : 'Waiting'}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900">
-                        {q.status === 'consulting' ? '—' : `${q.estimated_wait_minutes} min`}
+                        {(q.status === 'consulting' || q.status === 'in_consultation') ? '—' : `${q.estimated_wait_minutes} min`}
                       </td>
                     </tr>
                   );
@@ -425,12 +606,16 @@ export default function PatientView({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="medical-card p-6 text-center space-y-3">
             <div className="w-20 h-20 rounded-full bg-sky-100 border-2 border-sky-300 text-sky-700 flex items-center justify-center mx-auto text-2xl font-bold">
-              JD
+              {patientDisplayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'PT'}
             </div>
             <div>
-              <h4 className="text-base font-bold text-slate-900">John Doe</h4>
-              <p className="text-xs text-slate-500">MRN: MRN-1049 • Male, 42 yrs</p>
-              <p className="text-xs text-slate-500">+1 (555) 987-6543 • Blood: O+</p>
+              <h4 className="text-base font-bold text-slate-900">{patientDisplayName}</h4>
+              <p className="text-xs text-slate-500">
+                MRN: {tokenData?.patient_mrn || currentUser?.mrn || "MRN-1049"} • Patient Role
+              </p>
+              <p className="text-xs text-slate-500">
+                {tokenData?.patient_phone || currentUser?.phone || "+1 (555) 987-6543"} • {currentUser?.email || "patient@mediwait.ai"}
+              </p>
             </div>
             <div className="pt-3 border-t border-slate-100 flex justify-center gap-2">
               <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -440,27 +625,79 @@ export default function PatientView({
           </div>
 
           <div className="medical-card p-6 md:col-span-2 space-y-4">
-            <h4 className="text-sm font-bold text-slate-900">Recent Visit History</h4>
-            <div className="space-y-3">
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Cardiology Outpatient Follow-up</p>
-                  <p className="text-[11px] text-slate-500">Today • Dr. Kumar • Token A-127</p>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                  In Progress
-                </span>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Your Complete Visit History</h4>
+                <p className="text-xs text-slate-500">Click any visit to load it into your live dashboard tracker</p>
               </div>
-              <div className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-slate-800">General Medicine Annual Wellness</p>
-                  <p className="text-[11px] text-slate-500">Aug 14, 2026 • Dr. Anita Roy • Actual wait: 14 min</p>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
-                  Completed
-                </span>
-              </div>
+              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg">
+                {myVisits.length} Records
+              </span>
             </div>
+
+            {myVisits && myVisits.length > 0 ? (
+              <div className="space-y-3">
+                {myVisits.map((v) => {
+                  const isSelected = (selectedVisitId === v.id) || (!selectedVisitId && v.id === tokenData?.id);
+                  const isVCompleted = v.status === 'completed';
+                  const isVConsulting = v.status === 'consulting' || v.status === 'in_consultation';
+                  return (
+                    <div 
+                      key={v.id} 
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isSelected 
+                          ? 'border-sky-500 bg-sky-50/60 shadow-xs ring-1 ring-sky-300' 
+                          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/70'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm text-slate-900">{v.token_number}</span>
+                          <span className="font-semibold text-xs text-slate-800">{v.department_name}</span>
+                          {isSelected && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-600 text-white">
+                              Active View
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Doctor: <span className="font-semibold text-slate-700">{v.doctor_name || "Pending Assignment"}</span> ({v.doctor_room || "Triage"}) • Registered: {new Date(v.registered_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                          isVCompleted 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : isVConsulting 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {isVCompleted ? 'Completed' : isVConsulting ? 'In Consultation' : `Waiting (Pos #${v.queue_position})`}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (onSelectVisit) onSelectVisit(v.id);
+                            setActiveTab('dashboard');
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                            isSelected 
+                              ? 'bg-sky-600 text-white hover:bg-sky-700' 
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                          }`}
+                        >
+                          {isSelected ? 'Viewing' : 'View Visit'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">
+                <p className="text-xs">No visit history recorded yet.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
